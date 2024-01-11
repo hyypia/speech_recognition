@@ -1,2 +1,4 @@
 .env
 venv/
+*.oga
+*.wav
