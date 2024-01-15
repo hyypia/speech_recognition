@@ -1,8 +1,6 @@
 import logging
 import os
-import io
 
-import soundfile as sf
 import assemblyai as aai
 from dotenv import load_dotenv
 from telegram import Update
@@ -18,6 +16,8 @@ from telegram.ext import (
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
+    filename="enotebot.log",
+    filemode="w",
 )
 
 logger = logging.getLogger(__name__)
@@ -33,33 +33,21 @@ async def start(update: Update, context: CallbackContext) -> None:
 
 
 async def handle_voice(update: Update, context: CallbackContext) -> None:
-    # Getting audio from user
-    file_id = update.message.voice.file_id
-    new_file = await context.bot.get_file(file_id)
-    b = io.BytesIO()
-    path = await new_file.download_to_memory(b)
+    try:
+        if update.message.voice:
+            file_id = update.message.voice.file_id
+        elif update.message.audio:
+            file_id = update.message.audio.file_id
+        new_file = await context.bot.get_file(file_id)
 
-    # Convert audio from .oge to .wav format
-    data, samplerate = sf.read(path.name)
-    sf.write("output.wav", data, samplerate)
+        config = aai.TranscriptionConfig(language_code="ru")
+        transcriber = aai.Transcriber(config=config)
+        transcript = transcriber.transcribe(new_file.file_path)
+        await update.message.reply_text(transcript.text)
 
-    # Recognize and transcript audio
-
-    # r = sr.Recognizer()
-    # voice_audio = sr.AudioFile("output.wav")
-    # with voice_audio as source:
-    #     audio = r.record(source)
-    # transcript = r.recognize_google(audio, language="ru-RU")
-
-    config = aai.TranscriptionConfig(language_code="ru")
-    transcriber = aai.Transcriber(config=config)
-
-    transcript = transcriber.transcribe("./output.wav")
-
-    if transcript.status == aai.TranscriptStatus.error:
-        logger.error(f"Transcription failed: {transcript.error}")
-
-    await update.message.reply_text(transcript.text)
+    except Exception as e:
+        logger.error(f"Transcription failed: {e}")
+        await update.message.reply_text("Не удалось распознать, попробуй еще раз.")
 
 
 def main() -> None:
@@ -78,7 +66,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     load_dotenv()
-    aai.settings.api_key = "d376735cbfc749719ab8657812d88849"
+    aai.settings.api_key = os.environ.get("ASSEMBLYAI_API_KEY")
     telegram_token = os.environ.get("TELEGRAM_API_TOKEN")
 
     main()
